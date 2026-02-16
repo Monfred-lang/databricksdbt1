@@ -5,7 +5,7 @@ resources:
       tasks:
         - task_key: run_dbt_job
           dbt_task:
-            project_directory: ${workspace.root_path}
+            project_directory: ${workspace.root_path}/files/
             commands:
               - dbt deps
               - dbt seed
