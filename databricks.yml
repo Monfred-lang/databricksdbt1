@@ -18,6 +18,7 @@ variables:
 include:
   - resources/dbt_shopflow_job.yml
 
+
 targets:
   dev:
     mode: development
