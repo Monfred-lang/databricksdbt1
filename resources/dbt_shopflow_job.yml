@@ -12,9 +12,8 @@ resources:
               - dbt snapshot
               - dbt run
               - dbt test
-            schema: ${var.dbt_schema}
             warehouse_id: ${var.warehouse_id}
-            catalog: ${var.catalog}
+            catalog:  ${var.catalog}
             source: WORKSPACE
           environment_key: dbt-default
       queue:
