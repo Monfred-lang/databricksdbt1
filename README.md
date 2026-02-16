@@ -104,24 +104,39 @@ macros/             # generate_schema_name (schema as-is, no prefix/postfix)
 
 ## CI/CD (GitHub Actions)
 
-The workflow in `.github/workflows/dbt.yml` runs on push to `main`/`master` and on pull requests. It runs `dbt deps`, `dbt seed`, `dbt run`, and `dbt test` against Databricks.
+### Deploy bundle (DAB) — dev and prod
 
-### Required GitHub secrets
+Two workflows deploy the **Databricks Asset Bundle** by branch:
 
-| Secret                | Description                                      |
-|-----------------------|--------------------------------------------------|
-| `DATABRICKS_HOST`     | Workspace host, e.g. `xxx.cloud.databricks.com`  |
-| `DATABRICKS_HTTP_PATH`| SQL Warehouse HTTP path                          |
-| `DATABRICKS_TOKEN`    | Personal or service principal token (e.g. `dapi...`) |
+| Branch | Workflow                    | Target | GitHub environment |
+|--------|-----------------------------|--------|---------------------|
+| **dev**  | `.github/workflows/deploy-bundle-dev.yml`  | `dev`  | `dev`  |
+| **main** | `.github/workflows/deploy-bundle.yml`      | `prod` | `prod` |
 
-### Optional secrets
+- **Push to `dev`** → validate and deploy to **dev** (`databricks bundle deploy -t dev`). Job and files go to the dev bundle path in the workspace.
+- **Push to `main`** → validate and deploy to **prod** (`databricks bundle deploy -t prod`).
 
-| Secret                 | Description              | Default    |
-|------------------------|--------------------------|------------|
-| `DBT_SCHEMA`           | Schema for CI runs       | `silver`   |
-| `DATABRICKS_CATALOG`   | Unity Catalog name       | `workspace` |
+**Required GitHub secrets** (per environment or repo): `DATABRICKS_HOST`, `DATABRICKS_TOKEN`. Configure in **Settings → Secrets and variables → Actions** (repo-level) or per **Environment** (dev / prod) if you use different workspaces or tokens.
 
-Add these under **Settings → Secrets and variables → Actions** for the repo. Pushes to `main` and PRs will then run the pipeline against the Databricks workspace you configured.
+**Local deploy:**
+
+```bash
+export DATABRICKS_HOST="https://your-workspace.cloud.databricks.com"
+export DATABRICKS_TOKEN="dapi..."
+databricks bundle deploy -t dev    # or -t prod
+```
+
+Override `warehouse_id`, `catalog`, or `dbt_schema` in `databricks.yml` or via `--var` if needed.
+
+### dbt CI workflow (optional)
+
+If you add a workflow (e.g. `.github/workflows/dbt.yml`) that runs dbt on PRs, use these secrets as needed:
+
+| Secret                 | Description              |
+|------------------------|--------------------------|
+| `DATABRICKS_HTTP_PATH` | SQL Warehouse HTTP path  |
+| `DBT_SCHEMA`           | Schema for CI runs       |
+| `DATABRICKS_CATALOG`   | Unity Catalog name       |
 
 ## Interview talking points
 
@@ -137,11 +152,21 @@ See **[docs/GOLD_LAYER_QUESTIONS.md](docs/GOLD_LAYER_QUESTIONS.md)** for the dim
 
 **Production tip:** When raw data comes from a lake or warehouse instead of seeds, define **sources** in YAML and set **source freshness** so dbt can alert when data stops landing.
 
-## Databricks workflow (native dbt task + CI/CD)
+## Databricks workflow (DAB + native dbt task)
 
-The pipeline runs in Databricks using the **native dbt task** (Add task → **dbt**): Git source, SQL warehouse, and commands `dbt deps`, `dbt seed`, `dbt run`, `dbt snapshot`, `dbt test`.
+The pipeline is defined as a **Databricks Asset Bundle** so job and resources deploy from the repo.
 
-**databricks/job_dbt_pipeline.json** defines the job with one **dbt_task**. Replace `YOUR_ORG`, repo name, and `YOUR_SQL_WAREHOUSE_ID` in the JSON, or set Git source and SQL warehouse in the UI after import. Run the job once to confirm. **Deploy Databricks job** (on push to main) updates the job from the JSON; **Trigger Databricks dbt job** runs it by name via the API.
+- **`databricks.yml`** — bundle root: bundle name, variables (`warehouse_id`, `catalog`, `dbt_schema`), and target `prod`.
+- **`resources/dbt_shopflow_job.yml`** — job `dbtXdatabricks_shopflow` with one **dbt task** (serverless): `project_directory` = deployed bundle root, schema `bronze`, catalog `workspace`, commands `dbt deps`, `dbt seed`, `dbt snapshot`, `dbt run`, `dbt test`, and environment `dbt-default` (dbt-databricks ≥1.0, &lt;2.0).
+
+**Push to `dev`** or **merge to `main`** runs the corresponding deploy workflow, which syncs the repo and deploys/updates the job. Run the job from the Databricks Jobs UI or:
+
+```bash
+export DATABRICKS_HOST="https://your-workspace.cloud.databricks.com"
+databricks bundle run dbtXdatabricks_shopflow -t dev   # or -t prod
+```
+
+Legacy **`databricks/job_dbt_pipeline.json`** is kept for reference; the canonical definition is the bundle in `resources/`.
 
 ## License
 
