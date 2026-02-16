@@ -1,0 +1,51 @@
+{
+  "name": "shopflow-dbt-pipeline",
+  "description": "Runs dbt Core: deps, seed, run, snapshot, test. Uses native dbt task; set Git source and SQL warehouse in UI.",
+  "max_concurrent_runs": 1,
+  "git_source": {
+    "git_url": "https://github.com/YOUR_ORG/job-ready-dbt-databricks-data-engineering-project",
+    "git_provider": "gitHub",
+    "git_branch": "main"
+  },
+  "job_clusters": [
+    {
+      "job_cluster_key": "dbt_CLI",
+      "new_cluster": {
+        "spark_version": "13.3.x-scala2.12",
+        "node_type_id": "Standard_DS3_v2",
+        "num_workers": 0,
+        "data_security_mode": "USER_ISOLATION"
+      }
+    }
+  ],
+  "tasks": [
+    {
+      "task_key": "run_dbt",
+      "job_cluster_key": "dbt_CLI",
+      "dbt_task": {
+        "commands": [
+          "dbt deps",
+          "dbt seed",
+          "dbt snapshot",
+          "dbt run",
+          "dbt test"
+        ],
+        "warehouse_id": "YOUR_SQL_WAREHOUSE_ID"
+      },
+      "libraries": [
+        {
+          "pypi": {
+            "package": "dbt-databricks>=1.0.0,<2.0.0"
+          }
+        }
+      ],
+      "timeout_seconds": 1800
+    }
+  ],
+  "format": "MULTI_TASK",
+  "schedule": {
+    "quartz_cron_expression": "0 0 6 * * ?",
+    "timezone_id": "UTC",
+    "pause_status": "PAUSED"
+  }
+}

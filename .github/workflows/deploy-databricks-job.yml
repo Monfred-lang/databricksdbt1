@@ -1,0 +1,55 @@
+name: Deploy Databricks job
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy job to Databricks
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          GIT_URL: "https://github.com/${{ github.repository }}"
+        run: |
+          if [ -z "$DATABRICKS_HOST" ] || [ -z "$DATABRICKS_TOKEN" ]; then
+            echo "Skipping: DATABRICKS_HOST or DATABRICKS_TOKEN not set"
+            exit 0
+          fi
+          host="${DATABRICKS_HOST#https://}"
+          host="${host#http://}"
+          base="https://${host}/api/2.1/jobs"
+
+          # Build job payload: replace placeholders, remove env secrets (set in UI)
+          job_json=$(jq --arg url "$GIT_URL" \
+            '.git_source.git_url = $url |
+             .environments[0].spec.env_vars.DATABRICKS_HOST = "" |
+             .environments[0].spec.env_vars.DATABRICKS_HTTP_PATH = "" |
+             .environments[0].spec.env_vars.DATABRICKS_TOKEN = ""' \
+            databricks/job_dbt_pipeline.json)
+
+          # Try to get existing job by name
+          job_id=$(curl -s -X GET "$base/list?limit=100" \
+            -H "Authorization: Bearer $DATABRICKS_TOKEN" | \
+            jq -r --arg name "shopflow-dbt-pipeline" '.jobs[] | select(.settings.name == $name) | .job_id' | head -1)
+
+          if [ -n "$job_id" ] && [ "$job_id" != "null" ]; then
+            echo "Updating existing job_id: $job_id"
+            curl -s -X POST "$base/reset" \
+              -H "Authorization: Bearer $DATABRICKS_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"job_id\": $job_id, \"new_settings\": $job_json}"
+          else
+            echo "Creating new job"
+            curl -s -X POST "$base/create" \
+              -H "Authorization: Bearer $DATABRICKS_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$job_json"
+          fi
+          echo "Deploy done. Set job env vars (DATABRICKS_HTTP_PATH, DATABRICKS_TOKEN) in Databricks UI."
