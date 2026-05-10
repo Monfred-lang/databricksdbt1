@@ -4,7 +4,7 @@ models:
   - name: stg_orders
     description: "Staging view of orders. One row per order."
     columns:
-      - name: order_id
+      - name: order_id 
         description: "Unique order identifier"
         tests: [unique, not_null]
       - name: customer_id
